@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // better-sqlite3 yerine sqlite3
+const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const https = require('https');
@@ -9,24 +9,19 @@ app.use(cors());
 app.use(express.json());
 
 // ── VERİTABANI KURULUMU ──────────────────────────────────────────────
-const db = new sqlite3.Database('adxpro.db', (err) => {
-    if (err) console.error('Veritabanı hatası:', err.message);
-    else console.log('✅ SQLite veritabanına bağlanıldı.');
-});
+const db = new Database('adxpro.db');
 
-db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            uid        TEXT UNIQUE NOT NULL,
-            fullName   TEXT NOT NULL,
-            email      TEXT UNIQUE NOT NULL,
-            password   TEXT NOT NULL,
-            balance    REAL DEFAULT 0,
-            createdAt  TEXT DEFAULT (datetime('now'))
+db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+                                         id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                                         uid        TEXT UNIQUE NOT NULL,
+                                         fullName   TEXT NOT NULL,
+                                         email      TEXT UNIQUE NOT NULL,
+                                         password   TEXT NOT NULL,
+                                         balance    REAL DEFAULT 0,
+                                         createdAt  TEXT DEFAULT (datetime('now'))
         )
-    `);
-});
+`);
 
 // UID üretici
 function generateUID() {
@@ -71,79 +66,88 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ message: 'Tüm alanları doldurun.' });
     if (password.length < 8)
         return res.status(400).json({ message: 'Şifre en az 8 karakter olmalı.' });
-
-    db.get('SELECT id FROM users WHERE email = ?', [email], async (err, existing) => {
-        if (existing) return res.status(409).json({ message: 'Bu e-posta zaten kayıtlı.' });
-
-        const hashed = await bcrypt.hash(password, 10);
-        const uid = generateUID();
-
-        db.run('INSERT INTO users (uid, fullName, email, password) VALUES (?, ?, ?, ?)',
-            [uid, fullName, email, hashed], function(err) {
-                if (err) return res.status(500).json({ message: 'Kayıt hatası.' });
-
-                db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE id = ?', [this.lastID], (err, user) => {
-                    res.status(201).json(user);
-                });
-            });
-    });
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existing)
+        return res.status(409).json({ message: 'Bu e-posta zaten kayıtlı.' });
+    const hashed = await bcrypt.hash(password, 10);
+    let uid;
+    do { uid = generateUID(); } while (db.prepare('SELECT id FROM users WHERE uid = ?').get(uid));
+    db.prepare('INSERT INTO users (uid, fullName, email, password) VALUES (?, ?, ?, ?)').run(uid, fullName, email, hashed);
+    const user = db.prepare('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?').get(uid);
+    res.status(201).json(user);
 });
 
 // ── GİRİŞ ─────────────────────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-        if (!user) return res.status(401).json({ message: 'E-posta bulunamadı.' });
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) return res.status(401).json({ message: 'Şifre hatalı.' });
-        const { password: _, ...safeUser } = user;
-        res.json({ user: safeUser });
-    });
+    if (!email || !password)
+        return res.status(400).json({ message: 'E-posta ve şifre gerekli.' });
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!user) return res.status(401).json({ message: 'E-posta bulunamadı.' });
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ message: 'Şifre hatalı.' });
+    const { password: _, ...safeUser } = user;
+    res.json({ user: safeUser });
 });
 
 // ── TÜM KULLANICILARI LİSTELE ─────────────────────────────────────────
 app.get('/api/admin/users', (req, res) => {
-    db.all('SELECT id, uid, fullName, email, password, balance, createdAt FROM users ORDER BY id DESC', [], (err, rows) => {
-        res.json(rows);
-    });
+    const users = db.prepare('SELECT id, uid, fullName, email, password, balance, createdAt FROM users ORDER BY id DESC').all();
+    res.json(users);
 });
 
 // ── TEK KULLANICI GETİR ───────────────────────────────────────────────
 app.get('/api/users/:uid', (req, res) => {
-    db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?', [req.params.uid], (err, user) => {
-        if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
-        res.json(user);
-    });
+    const user = db.prepare('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?').get(req.params.uid);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    res.json(user);
 });
 
 // ── KULLANICI GÜNCELLE ────────────────────────────────────────────────
 app.patch('/api/users/:uid/update', async (req, res) => {
     const { fullName, password } = req.body;
-    const uid = req.params.uid;
-
-    if (fullName) {
-        db.run('UPDATE users SET fullName = ? WHERE uid = ?', [fullName, uid]);
-    }
+    const user = db.prepare('SELECT * FROM users WHERE uid = ?').get(req.params.uid);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    if (fullName) db.prepare('UPDATE users SET fullName = ? WHERE uid = ?').run(fullName, req.params.uid);
     if (password) {
+        if (password.length < 8) return res.status(400).json({ message: 'Şifre en az 8 karakter.' });
         const hashed = await bcrypt.hash(password, 10);
-        db.run('UPDATE users SET password = ? WHERE uid = ?', [hashed, uid]);
+        db.prepare('UPDATE users SET password = ? WHERE uid = ?').run(hashed, req.params.uid);
     }
-
-    db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?', [uid], (err, updated) => {
-        res.json(updated);
-    });
+    const updated = db.prepare('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?').get(req.params.uid);
+    res.json(updated);
 });
 
-// ── BAKİYE AYARLA ──────────────────────────────────────────────────
+// ── BAKİYEYİ SET ET (frontend al/sat) ────────────────────────────────
 app.patch('/api/users/:uid/setbalance', (req, res) => {
     const { balance } = req.body;
-    db.run('UPDATE users SET balance = ? WHERE uid = ?', [parseFloat(balance), req.params.uid], (err) => {
-        res.json({ uid: req.params.uid, balance: parseFloat(balance) });
-    });
+    if (isNaN(balance) || balance < 0) return res.status(400).json({ message: 'Geçersiz bakiye.' });
+    const user = db.prepare('SELECT * FROM users WHERE uid = ?').get(req.params.uid);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    db.prepare('UPDATE users SET balance = ? WHERE uid = ?').run(parseFloat(balance), req.params.uid);
+    res.json({ uid: req.params.uid, balance: parseFloat(balance) });
+});
+
+// ── BAKİYE ARTIR (admin) ──────────────────────────────────────────────
+app.patch('/api/users/:uid/balance', (req, res) => {
+    const { amount } = req.body;
+    const user = db.prepare('SELECT * FROM users WHERE uid = ?').get(req.params.uid);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    const newBalance = Math.max(0, user.balance + parseFloat(amount));
+    db.prepare('UPDATE users SET balance = ? WHERE uid = ?').run(newBalance, req.params.uid);
+    res.json({ uid: req.params.uid, balance: newBalance });
+});
+
+// ── KULLANICI SİL ─────────────────────────────────────────────────────
+app.delete('/api/users/:uid', (req, res) => {
+    const user = db.prepare('SELECT * FROM users WHERE uid = ?').get(req.params.uid);
+    if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    db.prepare('DELETE FROM users WHERE uid = ?').run(req.params.uid);
+    res.json({ success: true, message: `${user.fullName} silindi.` });
 });
 
 // ── SUNUCU BAŞLAT ─────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3001; // Render için dinamik port
-app.listen(PORT, () => {
-    console.log(`✅ Sunucu ${PORT} portunda çalışıyor.`);
+app.listen(3001, () => {
+    console.log('✅ ADX Pro Sunucu çalışıyor: http://localhost:3001');
+    console.log('📊 Admin panel: http://localhost:3001/api/admin/users');
 });
