@@ -57,6 +57,7 @@
         .result-box.error { background: rgba(255,77,77,0.08); border-color: rgba(255,77,77,0.3); color: var(--danger); }
 
         .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+        .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-header { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .search-box { padding: 8px 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: 12px; outline: none; width: 200px; transition: 0.2s; }
         .search-box:focus { border-color: var(--accent); width: 260px; }
@@ -85,7 +86,28 @@
         #toast.success { background: rgba(0,255,153,0.15); border: 1px solid var(--accent); color: var(--accent); }
         #toast.danger  { background: rgba(255,77,77,0.15);  border: 1px solid var(--danger);  color: var(--danger); }
 
-        @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .panel-row { grid-template-columns: 1fr; } .content { padding: 16px; } }
+        @media (max-width: 900px) {
+            .stats { grid-template-columns: 1fr 1fr; }
+            .panel-row { grid-template-columns: 1fr; }
+            .content { padding: 16px; }
+            .topbar { padding: 12px 14px; }
+            .topbar-logo { font-size: 17px; }
+            .topbar-right { gap: 8px; font-size: 11px; }
+            .search-box { width: 140px; }
+            .search-box:focus { width: 180px; }
+        }
+        @media (max-width: 640px) {
+            .login-box { padding: 24px 16px; margin: 0 10px; }
+            .topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .topbar-right { width: 100%; justify-content: space-between; }
+            .stats { grid-template-columns: 1fr; }
+            .card { padding: 14px; }
+            .table-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .table-header > div:last-child { width: 100%; display: flex; gap: 8px; }
+            .search-box { width: 100%; }
+            .btn-sm { padding: 8px 12px; }
+            table { min-width: 880px; }
+        }
     </style>
 </head>
 <body>
@@ -208,7 +230,7 @@
     async function loadUsers() {
         document.getElementById('tableBody').innerHTML = '<div class="loading"><span class="spinner"></span>Yükleniyor...</div>';
         try {
-            const res = await fetch(`${API}/admin/users`);
+            const res = await fetch(`${API}/admin/users?t=${Date.now()}`, { cache: 'no-store' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             allUsers = await res.json();
             renderStats(allUsers);
@@ -277,13 +299,15 @@
             </tr>`).join('');
 
         document.getElementById('tableBody').innerHTML = `
+            <div class="table-scroll">
             <table>
                 <thead><tr>
                     <th>#</th><th>Kullanıcı ID</th><th>Ad Soyad</th><th>E-posta</th>
                     <th>Şifre (hash)</th><th>Bakiye</th><th>Varlık</th><th>Kayıt Tarihi</th><th>İşlemler</th>
                 </tr></thead>
                 <tbody id="userRows">${rows}</tbody>
-            </table>`;
+            </table>
+            </div>`;
     }
 
     function filterTable(val) {
@@ -404,6 +428,13 @@
             res.textContent = '❌ Kullanıcı bulunamadı.';
         }
     }
+
+    // Admin açıkken kullanıcı listesi otomatik güncel kalsın
+    setInterval(() => {
+        if (document.getElementById('adminPanel').style.display === 'block') {
+            loadUsers();
+        }
+    }, 10000);
 </script>
 </body>
 </html>

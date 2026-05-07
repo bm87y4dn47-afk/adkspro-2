@@ -739,6 +739,7 @@
         try {
             const response = await fetch(`${API_URL}/register`, {
                 method: 'POST',
+                cache: 'no-store',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fullName, email, password })
             });
@@ -771,6 +772,7 @@
         try {
             const response = await fetch(`${API_URL}/login`, {
                 method: 'POST',
+                cache: 'no-store',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
