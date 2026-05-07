@@ -195,6 +195,17 @@ app.patch('/api/users/:uid/assets', (req, res) => {
     });
 });
 
+// ── VARLIĞI SET ET (frontend portföy değeri) ──────────────────────────
+app.patch('/api/users/:uid/setassets', (req, res) => {
+    const { assets } = req.body;
+    if (isNaN(assets) || assets < 0) return res.status(400).json({ message: 'Geçersiz varlık değeri.' });
+
+    db.run('UPDATE users SET assets = ? WHERE uid = ?', [parseFloat(assets), req.params.uid], (err) => {
+        if (err) return res.status(500).json({ message: 'Varlık güncellenemedi.' });
+        res.json({ uid: req.params.uid, assets: parseFloat(assets) });
+    });
+});
+
 // ── KULLANICI SİL ─────────────────────────────────────────────────────
 app.delete('/api/users/:uid', (req, res) => {
     db.run('DELETE FROM users WHERE uid = ?', [req.params.uid], function(err) {

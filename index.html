@@ -829,6 +829,27 @@
         localStorage.setItem(`adkspro_history_${uid}`,   JSON.stringify(tradeHistory.slice(0,50)));
     }
 
+    function calculatePortfolioAssets() {
+        return Object.keys(portfolio).reduce((sum, tk) => {
+            const pos = portfolio[tk];
+            const asset = assets.find(a => a.ticker === tk);
+            const price = asset && asset.price > 0 ? asset.price : pos.avgPrice;
+            return sum + (pos.qty * price);
+        }, 0);
+    }
+
+    async function syncAssets() {
+        if (!loggedUser) return;
+        const assetsValue = calculatePortfolioAssets();
+        try {
+            await fetch(`${API_URL}/users/${loggedUser.uid}/setassets`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assets: assetsValue })
+            });
+        } catch(e) {}
+    }
+
     function loadState() {
         if (!loggedUser) return;
         const uid = loggedUser.uid;
@@ -1114,6 +1135,7 @@
         renderPortfolio();
         renderPortfolioPage();
         saveState();
+        syncAssets();
         showToast(`✅ ${qty.toFixed(4)} ${asset.ticker} alındı @ $${asset.price.toLocaleString()}${tp?' | TP: $'+tp:''}`, 'success');
     }
 
@@ -1147,6 +1169,7 @@
         renderPortfolio();
         renderPortfolioPage();
         saveState();
+        syncAssets();
         showToast(`${pnl >= 0 ? '🟢' : '🔴'} ${sellQty.toFixed(4)} ${asset.ticker} satıldı | K/Z: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`, pnl >= 0 ? 'success' : 'danger');
     }
 
@@ -1198,6 +1221,7 @@
                     delete portfolio[tk];
                     renderPortfolio();
                     renderPortfolioPage();
+                    syncAssets();
                     showToast(`🎯 TP tetiklendi! ${tk} @ $${asset.price.toFixed(2)} | Kâr: +$${pnl.toFixed(2)}`, 'success');
                 }
             });
@@ -1645,6 +1669,7 @@
                 userBalance = user.balance;
                 loadState();
                 updateUserUI(user);
+                syncAssets();
             } catch(e) { localStorage.removeItem('adkspro_user'); }
         }
 
@@ -1655,6 +1680,7 @@
         setInterval(fetchNews, 300000);
         setInterval(saveState, 15000);
         setInterval(refreshBalanceFromServer, 30000); // admin bakiye güncellemelerini çek
+        setInterval(syncAssets, 15000); // admin panel için varlık değerini güncel tut
     };
 
     // ── YENİ: CONFIRMATION MODAL ──────────────────────────────────────
@@ -1726,6 +1752,7 @@
             renderPortfolio();
             renderPortfolioPage();
             saveState();
+            syncAssets();
             showToast(`✅ Tüm varlıklar satıldı | Toplam K/Z: ${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? 'success' : 'danger');
         });
     }
