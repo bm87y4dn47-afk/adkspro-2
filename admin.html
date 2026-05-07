@@ -165,7 +165,10 @@
 <script>
     const ADMIN_EMAIL    = "hazalaksoy2727@hotmail.com";
     const ADMIN_PASSWORD = "Hazal@27";
-    const API = "adkspro-production.up.railway.app";
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        ? 'http://127.0.0.1:3001'
+        : 'https://YOUR-BACKEND-URL.onrender.com';
+    const API = `${API_BASE}/api`;
 
     let allUsers = [];
 
@@ -221,10 +224,11 @@
     function renderStats(users) {
         const total   = users.length;
         const balance = users.reduce((s, u) => s + (parseFloat(u.balance) || 0), 0);
+        const assets  = users.reduce((s, u) => s + (parseFloat(u.assets) || 0), 0);
         const todayStr = new Date().toISOString().slice(0, 10);
         const today   = users.filter(u => u.createdAt && u.createdAt.startsWith(todayStr)).length;
         document.getElementById('statTotal').textContent   = total;
-        document.getElementById('statBalance').textContent = '$' + balance.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+        document.getElementById('statBalance').textContent = '$' + (balance + assets).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
         document.getElementById('statToday').textContent   = today;
     }
 
@@ -256,6 +260,9 @@
                 <td class="balance-cell" id="bal-${u.uid}">
                     $${parseFloat(u.balance || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                 </td>
+                <td class="balance-cell">
+                    $${parseFloat(u.assets || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                </td>
                 <td class="date-cell">${u.createdAt ? u.createdAt.replace('T',' ').slice(0,16) : '—'}</td>
                 <td>
                     <div style="display:flex;gap:5px;">
@@ -273,7 +280,7 @@
             <table>
                 <thead><tr>
                     <th>#</th><th>Kullanıcı ID</th><th>Ad Soyad</th><th>E-posta</th>
-                    <th>Şifre (hash)</th><th>Bakiye</th><th>Kayıt Tarihi</th><th>İşlemler</th>
+                    <th>Şifre (hash)</th><th>Bakiye</th><th>Varlık</th><th>Kayıt Tarihi</th><th>İşlemler</th>
                 </tr></thead>
                 <tbody id="userRows">${rows}</tbody>
             </table>`;
@@ -388,6 +395,7 @@
                 <div style="margin-bottom:4px;"><span class="uid-badge">${escHtml(u.uid)}</span></div>
                 <div><b>${escHtml(u.fullName)}</b> — ${escHtml(u.email)}</div>
                 <div style="margin-top:4px;">Bakiye: <b style="color:var(--accent)">$${parseFloat(u.balance||0).toLocaleString('tr-TR',{minimumFractionDigits:2})}</b></div>
+                <div style="margin-top:4px;">Varlık: <b style="color:var(--accent)">$${parseFloat(u.assets||0).toLocaleString('tr-TR',{minimumFractionDigits:2})}</b></div>
                 <div style="font-size:11px; color:var(--muted); margin-top:4px;">Kayıt: ${u.createdAt ? u.createdAt.slice(0,10) : '—'}</div>
             `;
         } else {
@@ -399,7 +407,3 @@
 </script>
 </body>
 </html>
-
-
-
-

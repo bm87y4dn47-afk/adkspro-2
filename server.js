@@ -1,41 +1,59 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // better-sqlite3 yerine sqlite3
+const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const https = require('https');
+const path = require('path');
 
 const app = express();
-app.use(cors());
+
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // ── VERİTABANI KURULUMU ──────────────────────────────────────────────
-const db = new sqlite3.Database('adxpro.db', (err) => {
+const dbPath = process.env.DATABASE_URL || path.join(__dirname, 'adxpro.db');
+const db = new sqlite3.Database(dbPath, (err) => {
     if (err) console.error('Veritabanı bağlantı hatası:', err.message);
-    else console.log('✅ SQLite veritabanına bağlanıldı.');
+    else console.log('✅ SQLite veritabanına bağlanıldı:', dbPath);
 });
 
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS users (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            uid        TEXT UNIQUE NOT NULL,
-            fullName   TEXT NOT NULL,
-            email      TEXT UNIQUE NOT NULL,
-            password   TEXT NOT NULL,
-            balance    REAL DEFAULT 0,
-            createdAt  TEXT DEFAULT (datetime('now'))
-        )
+                                             id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                                             uid        TEXT UNIQUE NOT NULL,
+                                             fullName   TEXT NOT NULL,
+                                             email      TEXT UNIQUE NOT NULL,
+                                             password   TEXT NOT NULL,
+                                             balance    REAL DEFAULT 0,
+                                             assets     REAL DEFAULT 0,
+                                             createdAt  TEXT DEFAULT (datetime('now'))
+            )
     `);
+
+    db.all("PRAGMA table_info(users)", (err, cols) => {
+        const hasAssets = cols && cols.some(c => c.name === 'assets');
+        if (!hasAssets) {
+            db.run("ALTER TABLE users ADD COLUMN assets REAL DEFAULT 0", (err) => {
+                if (!err) console.log('✅ assets sütunu eklendi');
+            });
+        }
+    });
 });
 
-// UID üretici (Dokunulmadı)
+// UID üretici
 function generateUID() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const rand = (n) => Array.from({length: n}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     return `ADX-${rand(4)}-${rand(4)}`;
 }
 
-// HTTP yardımcısı (Dokunulmadı)
+// HTTP yardımcısı
 function fetchUrl(url) {
     return new Promise((resolve, reject) => {
         https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
@@ -78,11 +96,11 @@ app.post('/api/register', async (req, res) => {
         const hashed = await bcrypt.hash(password, 10);
         const uid = generateUID();
 
-        db.run('INSERT INTO users (uid, fullName, email, password) VALUES (?, ?, ?, ?)',
+        db.run('INSERT INTO users (uid, fullName, email, password, balance, assets) VALUES (?, ?, ?, ?, 0, 0)',
             [uid, fullName, email, hashed], function(err) {
                 if (err) return res.status(500).json({ message: 'Kayıt hatası.' });
 
-                db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE id = ?', [this.lastID], (err, user) => {
+                db.get('SELECT id, uid, fullName, email, balance, assets, createdAt FROM users WHERE id = ?', [this.lastID], (err, user) => {
                     res.status(201).json(user);
                 });
             });
@@ -106,14 +124,14 @@ app.post('/api/login', (req, res) => {
 
 // ── TÜM KULLANICILARI LİSTELE ─────────────────────────────────────────
 app.get('/api/admin/users', (req, res) => {
-    db.all('SELECT id, uid, fullName, email, password, balance, createdAt FROM users ORDER BY id DESC', [], (err, rows) => {
+    db.all('SELECT id, uid, fullName, email, password, balance, assets, createdAt FROM users ORDER BY id DESC', [], (err, rows) => {
         res.json(rows || []);
     });
 });
 
-// ── TEK KULLANICI GETİR ───────────────────────────────────────────────
+// ── TEK KULLANICI GETİR ────────────────────────────────────────
 app.get('/api/users/:uid', (req, res) => {
-    db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?', [req.params.uid], (err, user) => {
+    db.get('SELECT id, uid, fullName, email, balance, assets, createdAt FROM users WHERE uid = ?', [req.params.uid], (err, user) => {
         if (!user) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
         res.json(user);
     });
@@ -136,7 +154,7 @@ app.patch('/api/users/:uid/update', async (req, res) => {
         }
 
         setTimeout(() => {
-            db.get('SELECT id, uid, fullName, email, balance, createdAt FROM users WHERE uid = ?', [uid], (err, updated) => {
+            db.get('SELECT id, uid, fullName, email, balance, assets, createdAt FROM users WHERE uid = ?', [uid], (err, updated) => {
                 res.json(updated);
             });
         }, 100);
@@ -165,6 +183,18 @@ app.patch('/api/users/:uid/balance', (req, res) => {
     });
 });
 
+// ── VARLIK ARTIR (admin) ────────────────────────────────────────
+app.patch('/api/users/:uid/assets', (req, res) => {
+    const { amount } = req.body;
+    db.get('SELECT assets FROM users WHERE uid = ?', [req.params.uid], (err, row) => {
+        if (!row) return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+        const newAssets = Math.max(0, row.assets + parseFloat(amount));
+        db.run('UPDATE users SET assets = ? WHERE uid = ?', [newAssets, req.params.uid], () => {
+            res.json({ uid: req.params.uid, assets: newAssets });
+        });
+    });
+});
+
 // ── KULLANICI SİL ─────────────────────────────────────────────────────
 app.delete('/api/users/:uid', (req, res) => {
     db.run('DELETE FROM users WHERE uid = ?', [req.params.uid], function(err) {
@@ -174,6 +204,6 @@ app.delete('/api/users/:uid', (req, res) => {
 
 // ── SUNUCU BAŞLAT ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Sunucu ${PORT} portunda aktif.`);
 });

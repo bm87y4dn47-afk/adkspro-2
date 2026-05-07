@@ -375,6 +375,55 @@
             flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
             border-radius: 8px; padding: 8px 10px; color: var(--text); outline: none; font-size: 12px;
         }
+
+        /* ── YENİ: NOTIFICATION TOAST (yan panel) ── */
+        .notification-toast {
+            position: fixed; top: 80px; right: 20px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 18px;
+            z-index: 9999; max-width: 340px;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        }
+        .notification-toast.error {
+            border-color: var(--danger);
+            background: rgba(255,77,77,0.08);
+            color: var(--danger);
+        }
+        .notification-toast.success {
+            border-color: var(--accent);
+            background: rgba(0,255,153,0.08);
+            color: var(--accent);
+        }
+        .notification-toast.warning {
+            border-color: #ffaa00;
+            background: rgba(255,170,0,0.08);
+            color: #ffaa00;
+        }
+
+        /* ── YENİ: CONFIRMATION MODAL ── */
+        .confirm-modal {
+            background: var(--card); padding: 30px; border-radius: 15px;
+            border: 1px solid var(--border); max-width: 400px; text-align: center;
+        }
+        .confirm-modal h3 { margin: 0 0 15px 0; color: var(--accent); font-size: 18px; }
+        .confirm-modal p { margin: 0 0 25px 0; opacity: 0.8; font-size: 14px; }
+        .confirm-buttons { display: flex; gap: 12px; justify-content: center; }
+        .confirm-buttons button {
+            flex: 1; padding: 10px 20px; border-radius: 8px;
+            border: 1px solid var(--border); background: rgba(255,255,255,0.03);
+            color: var(--text); cursor: pointer; font-weight: 600; transition: 0.2s;
+        }
+        .confirm-buttons button.confirm {
+            background: var(--accent); color: #000; border-color: var(--accent);
+        }
+        .confirm-buttons button:hover { opacity: 0.8; }
+        .light .wallet-card { background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 100%); }
+        .light #tv { background: #fff; }
+        .light #amount, .light #marginAmount, .light #tpInput {
+            color: var(--text) !important;
+            background: rgba(0,0,0,0.03) !important;
+        }
     </style>
 </head>
 <body>
@@ -422,6 +471,7 @@
     <div id="logo" style="font-size:22px; font-weight:800; letter-spacing:-1px;">ADKS<span style="color:var(--accent)">PRO</span></div>
     <div class="controls">
         <button onclick="toggleTheme()">🌓</button>
+        <button onclick="openLiveChat()" title="Live Chat">💬</button>
         <select id="langSelect" onchange="setLang(this.value)">
             <option value="tr">🇹🇷 TR</option>
             <option value="en">🇬🇧 EN</option>
@@ -611,7 +661,7 @@
                 <div style="background:rgba(0,255,153,0.06); border:1px solid rgba(0,255,153,0.2); border-radius:10px; padding:16px; text-align:center; margin-bottom:20px;">
                     <div style="font-size:14px; line-height:1.6; opacity:0.9;">To add balance to your account,<br>please contact us via chat.</div>
                 </div>
-                <button onclick="window.open('https://t.me/YOUR_TELEGRAM_USERNAME','_blank')" style="width:100%; padding:13px; background:var(--accent); color:#000; border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <button onclick="window.open('https://t.me/mm88888m88','_blank')" style="width:100%; padding:13px; background:var(--accent); color:#000; border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
                     <span style="font-size:18px;">✈️</span> Contact Support on Telegram
                 </button>
             </div>
@@ -620,7 +670,7 @@
         <div class="wallet-card">
             <div style="font-size: 12px; opacity: 0.7;" data-i18n="total_assets">Toplam Varlık</div>
             <div id="totalBalance" style="font-size: 28px; font-weight: 800; margin: 5px 0;">$0.00</div>
-            <button class="deposit-btn" onclick="document.getElementById('depositModal').style.display='flex'" title="Add Funds">+</button>
+            <button class="deposit-btn" onclick="window.open('https://t.me/mm88888m88','_blank')" title="Add Funds">+</button>
         </div>
         <div class="box" style="margin-bottom: 20px;">
             <div class="box-title" id="orderBookTitle">BTC Emir Defteri 📊</div>
@@ -635,13 +685,12 @@
     </div>
 </div>
 
-<div class="status-bar">
-    <span class="green">●</span> Canlı Veri Akışı | Gecikme: 14ms | Tiflis / Node-01 | v2.8.5
-</div>
-
 <script>
     const API_KEY = "4dc4ec14c139421d96f15b9c7166ea00";
-    const API_URL = "adkspro-production.up.railway.app";
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        ? 'http://127.0.0.1:3001'
+        : 'https://YOUR-BACKEND-URL.onrender.com';
+    const API_URL = `${API_BASE}/api`;
 
     let currentTicker = "BTC";
     let currentSymbol = "BINANCE:BTCUSDT";
@@ -661,6 +710,15 @@
     function clearModalMsg(modalId) {
         const el = document.getElementById(modalId.replace('Modal','') + 'Msg');
         if (el) { el.style.display = 'none'; el.textContent = ''; }
+    }
+
+    function syncCrispUser(user) {
+        if (!window.$crisp || !user) return;
+        window.$crisp.push(["set", "user:nickname", [`${user.uid} - ${user.fullName || ''}`.trim()]]);
+        if (user.email) {
+            window.$crisp.push(["set", "user:email", [user.email]]);
+        }
+        window.$crisp.push(["set", "session:data", [[["uid", user.uid || ""]]]]);
     }
 
     // ── KAYIT (REGISTER) ─────────────────────────────────────────────
@@ -734,6 +792,7 @@
         loggedUser = user;
         // Oturumu kaydet
         localStorage.setItem('adkspro_user', JSON.stringify(user));
+        syncCrispUser(user);
         const t = i18n[currentLang];
         document.getElementById('navbarAuth').innerHTML = `
             <div class="user-badge">
@@ -752,6 +811,9 @@
 
     function doLogout() {
         localStorage.removeItem('adkspro_user');
+        if (window.$crisp) {
+            window.$crisp.push(["do", "session:reset"]);
+        }
         // Portföy verisi kullanıcıya ait key ile saklandığı için silinmiyor
         portfolio = {};
         tradeHistory = [];
@@ -826,11 +888,11 @@
         {ticker:"ADBE", name:"Adobe", symbol:"NASDAQ:ADBE", apiSymbol:"ADBE", type:"stock"},
         {ticker:"DIS", name:"Disney", symbol:"NYSE:DIS", apiSymbol:"DIS", type:"stock"},
         {ticker:"V", name:"Visa", symbol:"NYSE:V", apiSymbol:"V", type:"stock"},
-        {ticker:"THYAO", name:"THY", symbol:"BIST:THYAO", apiSymbol:"THYAO", type:"stock"},
-        {ticker:"EREGL", name:"Erdemir", symbol:"BIST:EREGL", apiSymbol:"EREGL", type:"stock"},
-        {ticker:"KCHOL", name:"Koç Hol.", symbol:"BIST:KCHOL", apiSymbol:"KCHOL", type:"stock"},
-        {ticker:"ASELS", name:"Aselsan", symbol:"BIST:ASELS", apiSymbol:"ASELS", type:"stock"},
-        {ticker:"TUPRS", name:"Tüpraş", symbol:"BIST:TUPRS", apiSymbol:"TUPRS", type:"stock"},
+        {ticker:"THYAO", name:"THY", symbol:"BIST:THYAO", apiSymbol:"THYAO.IS", type:"stock"},
+        {ticker:"EREGL", name:"Erdemir", symbol:"BIST:EREGL", apiSymbol:"EREGL.IS", type:"stock"},
+        {ticker:"KCHOL", name:"Koç Hol.", symbol:"BIST:KCHOL", apiSymbol:"KCHOL.IS", type:"stock"},
+        {ticker:"ASELS", name:"Aselsan", symbol:"BIST:ASELS", apiSymbol:"ASELS.IS", type:"stock"},
+        {ticker:"TUPRS", name:"Tüpraş", symbol:"BIST:TUPRS", apiSymbol:"TUPRS.IS", type:"stock"},
         {ticker:"GOLD", name:"Altın", symbol:"TVC:GOLD", apiSymbol:"XAU/USD", type:"stock"}
     ];
 
@@ -914,30 +976,6 @@
         }));
     }
 
-    // Tüm portföyü sat
-    function sellAll() {
-        const tickers = Object.keys(portfolio);
-        if (!tickers.length) return alert('Portföyünüz boş!');
-        if (!confirm(`Portföyünüzdeki ${tickers.length} varlığın tamamını satmak istediğinize emin misiniz?`)) return;
-        let totalRevenue = 0; let totalPnl = 0;
-        tickers.forEach(tk => {
-            const pos   = portfolio[tk];
-            const asset = assets.find(a => a.ticker === tk);
-            const price = asset && asset.price > 0 ? asset.price : pos.avgPrice;
-            const revenue = pos.qty * price;
-            const pnl     = revenue - pos.qty * pos.avgPrice;
-            totalRevenue += revenue; totalPnl += pnl;
-            tradeHistory.unshift({ type:'SAT', ticker: tk, qty: pos.qty, price, usd: revenue, pnl, time: new Date() });
-            delete portfolio[tk];
-        });
-        userBalance += totalRevenue;
-        loggedUser && (loggedUser.balance = userBalance);
-        syncBalance();
-        renderPortfolio();
-        renderPortfolioPage();
-        showToast(`🔴 Tüm pozisyonlar kapatıldı | Toplam K/Z: ${totalPnl>=0?'+':''}$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? 'success' : 'danger');
-    }
-
     function renderLists() {
         const trendList = document.getElementById("assetList");
         const cryptoTable = document.getElementById("fullCryptoList");
@@ -991,8 +1029,6 @@
             "style": "1", "locale": "tr", "container_id": "tv"
         });
     }
-
-    function toggleTheme() { document.body.classList.toggle("light"); loadChart(); }
 
     function generateOrderBook() {
         const sellDiv = document.getElementById("orderBookSell");
@@ -1052,10 +1088,10 @@
         if (!loggedUser) { openModal('loginModal'); showToast('Alım yapmak için giriş yapın!', 'danger'); return; }
         const usd   = parseFloat(document.getElementById('amount').value);
         const tp    = parseFloat(document.getElementById('tpInput').value) || null;
-        if (!usd || usd <= 0) return alert('Miktar girin!');
-        if (usd > userBalance) return alert('Yetersiz bakiye! Bakiyeniz: $' + userBalance.toFixed(2));
+        if (!usd || usd <= 0) { showToast('Miktar girin!', 'danger'); return; }
+        if (usd > userBalance) { showToast('Yetersiz bakiye!', 'danger'); return; }
         const asset = assets.find(a => a.ticker === currentTicker);
-        if (!asset || asset.price <= 0) return alert('Fiyat henüz yüklenmedi, bekleyin.');
+        if (!asset || asset.price <= 0) { showToast('Fiyat henuz yuklenmedi.', 'danger'); return; }
 
         const qty = usd / asset.price;
         userBalance -= usd;
@@ -1084,14 +1120,14 @@
     function simpleSell() {
         if (!loggedUser) { openModal('loginModal'); showToast('Satış yapmak için giriş yapın!', 'danger'); return; }
         const usd   = parseFloat(document.getElementById('amount').value);
-        if (!usd || usd <= 0) return alert('Satmak istediğiniz USD değerini girin!');
+        if (!usd || usd <= 0) { showToast('Satmak istediginiz miktari girin!', 'danger'); return; }
         const asset = assets.find(a => a.ticker === currentTicker);
-        if (!asset || asset.price <= 0) return alert('Fiyat yüklenmedi.');
+        if (!asset || asset.price <= 0) { showToast('Fiyat yuklenmedi.', 'danger'); return; }
         const pos = portfolio[asset.ticker];
-        if (!pos || pos.qty <= 0) return alert(`Portföyünüzde ${asset.ticker} yok!`);
+        if (!pos || pos.qty <= 0) { showToast(`Portfoyde ${asset.ticker} yok!`, 'danger'); return; }
 
         const sellQty = usd / asset.price;
-        if (sellQty > pos.qty) return alert(`Yeterli ${asset.ticker} yok! Elinizde: ${pos.qty.toFixed(6)}`);
+        if (sellQty > pos.qty) { showToast(`Yeterli ${asset.ticker} yok!`, 'danger'); return; }
 
         const revenue = sellQty * asset.price;
         const cost    = sellQty * pos.avgPrice;
@@ -1336,6 +1372,7 @@
 
     function setLang(lang) {
         currentLang = lang;
+        localStorage.setItem('lang', lang);
         const t = i18n[lang];
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.dataset.i18n;
@@ -1349,6 +1386,11 @@
         document.getElementById('amount').placeholder = t.amount_ph;
         const tpInput = document.getElementById('tpInput');
         if (tpInput) tpInput.placeholder = t.tp_label;
+        const langSelect = document.getElementById('langSelect');
+        if (langSelect) langSelect.value = lang;
+        document.documentElement.lang = lang;
+        renderPortfolioPage();
+        renderSettingsPage();
     }
 
     // ══════════════════════════════════════════════════════
@@ -1485,10 +1527,10 @@
     function openMarginPosition(direction) {
         if (!loggedUser) { openModal('loginModal'); showToast('Margin işlemi için giriş yapın!', 'danger'); return; }
         const margin = parseFloat(document.getElementById('marginAmount').value);
-        if (!margin || margin <= 0) return alert('Teminat girin!');
-        if (margin > userBalance)   return alert('Yetersiz bakiye!');
+        if (!margin || margin <= 0) { showToast('Teminat girin!', 'danger'); return; }
+        if (margin > userBalance)   { showToast('Yetersiz bakiye!', 'danger'); return; }
         const asset = assets.find(a => a.ticker === currentTicker);
-        if (!asset || asset.price <= 0) return alert('Fiyat yüklenmedi!');
+        if (!asset || asset.price <= 0) { showToast('Fiyat yuklenmedi!', 'danger'); return; }
         const entryPrice = asset.price;
         const posSize    = margin * leverage;
         const liqPrice   = direction === 'long' ? entryPrice*(1-1/leverage) : entryPrice*(1+1/leverage);
@@ -1499,6 +1541,8 @@
         document.getElementById('marginAmount').value = '';
         document.getElementById('marginInfo').style.display = 'none';
         renderMarginPositions();
+        syncBalance();
+        saveState();
         showToast(`⚡ ${direction.toUpperCase()} ${leverage}x açıldı @ $${entryPrice.toLocaleString()}`, 'success');
     }
 
@@ -1515,6 +1559,8 @@
         document.getElementById('totalBalance').innerText = '$' + userBalance.toLocaleString(undefined,{minimumFractionDigits:2});
         marginPositions.splice(idx, 1);
         renderMarginPositions();
+        syncBalance();
+        saveState();
         showToast(`Pozisyon kapatıldı | K/Z: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`, pnl>=0?'success':'danger');
     }
 
@@ -1547,7 +1593,13 @@
             const asset = assets.find(a => a.ticker === pos.ticker);
             const cur   = asset && asset.price > 0 ? asset.price : pos.entryPrice;
             const isLiq = pos.direction==='long' ? cur<=pos.liqPrice : cur>=pos.liqPrice;
-            if (isLiq) { pos.liquidated=true; showToast(`💀 ${pos.ticker} ${pos.leverage}x LİKİDE! Teminat kaybedildi.`,'danger'); renderMarginPositions(); return; }
+            if (isLiq) {
+                pos.liquidated=true;
+                showToast(`💀 ${pos.ticker} ${pos.leverage}x LIKIDE! Teminat kaybedildi.`,'danger');
+                saveState();
+                renderMarginPositions();
+                return;
+            }
             const isMC  = pos.direction==='long' ? cur<=pos.mcPrice : cur>=pos.mcPrice;
             if (isMC) { anyCall=true; msgs.push(`${pos.ticker} ${pos.leverage}x kritik!`); }
         });
@@ -1569,25 +1621,13 @@
         if (id === 'settings')  renderSettingsPage();
     }
 
-    // Bakiyeyi server'a anlık gönder
-    function syncBalance() {
-        if (!loggedUser) return;
-        loggedUser.balance = userBalance;
-        localStorage.setItem('adkspro_user', JSON.stringify(loggedUser));
-        document.getElementById('totalBalance').innerText = '$' + userBalance.toLocaleString(undefined, {minimumFractionDigits:2});
-        fetch(`${API_URL}/users/${loggedUser.uid}/setbalance`, {
-            method: 'PATCH',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ balance: userBalance })
-        }).catch(()=>{});
-    }
-
     function openSupport() {
-        window.open('https://t.me/YOUR_TELEGRAM_USERNAME', '_blank');
+        window.open('https://t.me/mm88888m88', '_blank');
     }
 
     window.onload = async () => {
         renderLists(); loadChart(); initWebSocket(); fetchStockPrices(); fetchNews();
+        setLang(localStorage.getItem('lang') || 'tr');
 
         // Oturumu geri yükle — bakiye her zaman server'dan
         const savedUser = localStorage.getItem('adkspro_user');
@@ -1617,6 +1657,133 @@
         setInterval(refreshBalanceFromServer, 30000); // admin bakiye güncellemelerini çek
     };
 
+    // ── YENİ: CONFIRMATION MODAL ──────────────────────────────────────
+    let confirmCallback = null;
+    function showConfirm(title, message, callback) {
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        confirmCallback = callback;
+        document.getElementById('confirmModal').style.display = 'flex';
+    }
+    function confirmAction() {
+        if (confirmCallback) confirmCallback();
+        document.getElementById('confirmModal').style.display = 'none';
+    }
+    function cancelConfirm() {
+        document.getElementById('confirmModal').style.display = 'none';
+        confirmCallback = null;
+    }
+
+    // ── YENİ: NOTIFICATION TOAST ────────────────────────────────────
+    function showNotification(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `notification-toast ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // ── YENİ: THEME TOGGLE ─────────────────────────────────────────
+    function toggleTheme() {
+        const isDark = document.body.classList.contains('light');
+        if (isDark) {
+            document.body.classList.remove('light');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.body.classList.add('light');
+            localStorage.setItem('theme', 'light');
+        }
+        loadChart();
+    }
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light');
+    }
+
+    // ── YENİ: SELL ALL WITH CONFIRMATION ────────────────────────────
+    function sellAll() {
+        if (!loggedUser) { openModal('loginModal'); showToast('Satış yapmak için giriş yapın!', 'danger'); return; }
+        const tickers = Object.keys(portfolio);
+        if (tickers.length === 0) { showToast('Satacak varlık yok!', 'danger'); return; }
+        showConfirm('Tümünü Sat', 'Tüm varlıklarınızı satmak istediğinize emin misiniz?', () => {
+            let totalPnl = 0;
+            tickers.forEach(tk => {
+                const pos = portfolio[tk];
+                const asset = assets.find(a => a.ticker === tk);
+                if (!asset || asset.price <= 0) return;
+                const revenue = pos.qty * asset.price;
+                const pnl = revenue - pos.qty * pos.avgPrice;
+                totalPnl += pnl;
+                userBalance += revenue;
+                tradeHistory.unshift({ type:'SAT', ticker: tk, qty: pos.qty, price: asset.price, usd: revenue, pnl, time: new Date() });
+                delete portfolio[tk];
+            });
+            loggedUser.balance = userBalance;
+            syncBalance();
+            document.getElementById('totalBalance').innerText = '$' + userBalance.toLocaleString(undefined, {minimumFractionDigits:2});
+            renderPortfolio();
+            renderPortfolioPage();
+            saveState();
+            showToast(`✅ Tüm varlıklar satıldı | Toplam K/Z: ${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`, totalPnl >= 0 ? 'success' : 'danger');
+        });
+    }
+
+    // ── YENİ: MARGIN KAZANCINI KALICI KAYDET ────────────────────────
+    async function syncBalance() {
+        if (!loggedUser) return;
+        loggedUser.balance = userBalance;
+        localStorage.setItem('adkspro_user', JSON.stringify(loggedUser));
+        const balanceEl = document.getElementById('totalBalance');
+        if (balanceEl) {
+            balanceEl.innerText = '$' + userBalance.toLocaleString(undefined, {minimumFractionDigits:2});
+        }
+        try {
+            await fetch(`${API_URL}/users/${loggedUser.uid}/setbalance`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ balance: userBalance })
+            });
+        } catch(e) {}
+    }
+
+    let isLiveChatOpen = false;
+    function openLiveChat() {
+        if (!window.$crisp) return;
+        if (isLiveChatOpen) {
+            window.$crisp.push(["do", "chat:close"]);
+            isLiveChatOpen = false;
+            return;
+        }
+        window.$crisp.push(["do", "chat:open"]);
+        isLiveChatOpen = true;
+    }
 </script>
+
+<script type="text/javascript">
+window.$crisp=[];
+window.CRISP_WEBSITE_ID="10d26f40-5e34-4862-96fb-38cad04596ad";
+(function(){
+    const d=document;
+    const s=d.createElement("script");
+    s.src="https://client.crisp.chat/l.js";
+    s.async=1;
+    d.getElementsByTagName("head")[0].appendChild(s);
+})();
+</script>
+
+<!-- ── YENİ: CONFIRMATION MODAL ── -->
+<div id="confirmModal" class="modal-overlay" onclick="if(event.target===this)cancelConfirm()">
+    <div class="confirm-modal">
+        <h3 id="confirmTitle">Emin misiniz?</h3>
+        <p id="confirmMessage">Bu işlemi gerçekleştirmek istediğinize emin misiniz?</p>
+        <div class="confirm-buttons">
+            <button onclick="cancelConfirm()">İptal</button>
+            <button class="confirm" onclick="confirmAction()">Evet</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
